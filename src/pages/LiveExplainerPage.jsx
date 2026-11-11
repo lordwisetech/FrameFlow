@@ -18,7 +18,7 @@ import SettingsModal from '../components/live/SettingsModal';
 import ExportOverlay from '../components/live/ExportOverlay';
 import AIDirector from '../components/live/AIDirector';
 import { generateGeminiSceneSpeech, alignGeminiSpeech, combineAudioBlobs } from '../services/geminiSpeech';
-import { loadKokoro, generateKokoroAudio } from '../services/kokoroSpeech';
+import { loadPhononModel, phononSynthFloat, phononPreview, phononIsLoaded, phononVoices, getPhononLoadProgress, encodeWav } from '../services/phononTts';
 import { loadSpeechAligner, alignSpeechBlob } from '../services/speechAlignment';
 import { saveProject } from '../services/projectStore';
 
@@ -48,16 +48,17 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
   const [speechSpeed, setSpeechSpeed] = useState(initial.speechSpeed || 1);
   const [generatingSpeech, setGeneratingSpeech] = useState(false);
   const [speechStatus, setSpeechStatus] = useState('');
-  const [kokoroVoice, setKokoroVoice] = useState(initial.kokoroVoice || 'af_heart');
-  const [kokoroLoaded, setKokoroLoaded] = useState(false);
-  const [kokoroLoading, setKokoroLoading] = useState(false);
-  const [kokoroGenerating, setKokoroGenerating] = useState(false);
-  const [kokoroStatus, setKokoroStatus] = useState('');
+  const [phononVoice, setPhononVoice] = useState(initial.phononVoice || 'default');
+  const [phononLoaded, setPhononLoaded] = useState(false);
+  const [phononLoading, setPhononLoading] = useState(false);
+  const [phononGenerating, setPhononGenerating] = useState(false);
+  const [phononStatus, setPhononStatus] = useState('');
+  const [phononVoicesState, setPhononVoicesState] = useState(phononVoices);
   const [alignmentLoaded, setAlignmentLoaded] = useState(false);
   const [alignmentLoading, setAlignmentLoading] = useState(false);
-  const [kokoroPreviewing, setKokoroPreviewing] = useState(false);
-  const [kokoroPreviewStatus, setKokoroPreviewStatus] = useState('');
-  const [kokoroPreviewUrl, setKokoroPreviewUrl] = useState('');
+  const [phononPreviewing, setPhononPreviewing] = useState(false);
+  const [phononPreviewStatus, setPhononPreviewStatus] = useState('');
+  const [phononPreviewUrl, setPhononPreviewUrl] = useState('');
   const previewUrlRef = useRef('');
   const [pixSeed, setPixSeed] = useState({ q: '', n: 0 });
   const [showSettings, setShowSettings] = useState(false);
@@ -123,14 +124,14 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
     setSaveStatus('Saving…');
     const timer = window.setTimeout(async () => {
       try {
-        const updated = { ...project, name: projectName.trim() || 'Untitled project', updatedAt: Date.now(), data: { script, raw, aspect, caption, bgVol, voiceName, speechStyle, speechSpeed, kokoroVoice, voiceBlob: voice?.file || null, bgBlob: bg?.file || null } };
+        const updated = { ...project, name: projectName.trim() || 'Untitled project', updatedAt: Date.now(), data: { script, raw, aspect, caption, bgVol, voiceName, speechStyle, speechSpeed, phononVoice, voiceBlob: voice?.file || null, bgBlob: bg?.file || null } };
         await saveProject(updated);
         onProjectChange?.(updated);
         setSaveStatus('Saved');
       } catch (error) { console.error('Project autosave failed:', error); setSaveStatus('Save failed'); }
     }, 650);
     return () => window.clearTimeout(timer);
-  }, [project?.id, projectName, script, raw, aspect, caption, bgVol, voiceName, speechStyle, speechSpeed, kokoroVoice, voice?.file, bg?.file]);
+  }, [project?.id, projectName, script, raw, aspect, caption, bgVol, voiceName, speechStyle, speechSpeed, phononVoice, voice?.file, bg?.file]);
 
   const updateScene = (id, patch) => setRaw((p) => p.map((s) => {
     if (s.id !== id) return s;
@@ -222,57 +223,66 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
     } finally { setGeneratingSpeech(false); }
   };
 
-  const loadLocalKokoro = async () => {
-    if (kokoroLoaded || kokoroLoading) return;
-    setKokoroLoading(true);
-    setKokoroStatus('Loading Kokoro. The first run downloads the model; later runs should use the browser cache.');
+  const loadLocalPhonon = async () => {
+    if (phononLoaded || phononLoading) return;
+    setPhononLoading(true);
+    setPhononStatus('Downloading Phonon TTS model (first run downloads ~64 MB + voice). Keep this tab open.');
+    const progressTimer = window.setInterval(() => {
+      setPhononStatus(getPhononLoadProgress() || 'Downloading Phonon TTS model…');
+    }, 500);
     try {
-      await loadKokoro((progress) => setKokoroStatus(progress.message || 'Preparing Kokoro…'));
-      setKokoroLoaded(true);
-      setKokoroStatus('Kokoro is ready on this device. You can now generate narration offline while the cached model remains available.');
+      await loadPhononModel({
+        onProgress: (progress) => setPhononStatus(progress),
+      });
+      setPhononLoaded(true);
+      setPhononStatus('Phonon TTS model ready on this device. You can now generate narration offline.');
     } catch (error) {
-      console.error('Kokoro load failed:', error);
-      setKokoroStatus(`Could not load Kokoro: ${error.message}`);
-    } finally { setKokoroLoading(false); }
+      console.error('Phonon load failed:', error);
+      setPhononStatus(`Could not load Phonon TTS: ${error.message}`);
+    } finally {
+      window.clearInterval(progressTimer);
+      setPhononLoading(false);
+    }
   };
 
   const loadLocalAligner = async () => {
     if (alignmentLoaded) return true;
     if (alignmentLoading) return false;
     setAlignmentLoading(true);
-    setKokoroStatus('Downloading / loading the separate offline word-sync model…');
+    setPhononStatus('Downloading / loading the separate offline word-sync model…');
     try {
-      await loadSpeechAligner((progress) => setKokoroStatus(progress.message || 'Preparing offline word sync…'));
+      await loadSpeechAligner((progress) => setPhononStatus(progress.message || 'Preparing offline word sync…'));
       setAlignmentLoaded(true);
-      setKokoroStatus('Offline caption sync model is ready. It can analyse generated speech on this device.');
+      setPhononStatus('Offline caption sync model is ready. It can analyse generated speech on this device.');
       return true;
     } catch (error) {
       console.error('Caption sync model load failed:', error);
-      setKokoroStatus(`Could not load the offline caption sync model: ${error.message}`);
+      setPhononStatus(`Could not load the offline caption sync model: ${error.message}`);
       throw error;
     } finally { setAlignmentLoading(false); }
   };
 
-  const previewKokoroVoice = async () => {
-    if (kokoroPreviewing || kokoroGenerating) return;
-    setKokoroPreviewing(true);
-    setKokoroPreviewStatus('Preparing voice sample…');
+  const previewPhononVoice = async () => {
+    if (phononPreviewing || phononGenerating) return;
+    setPhononPreviewing(true);
+    setPhononPreviewStatus('Preparing voice sample…');
     try {
-      if (!kokoroLoaded) await loadLocalKokoro();
-      const sample = await generateKokoroAudio({
-        text: 'Hello! This is a short preview of the selected Kokoro voice.',
-        voice: kokoroVoice,
+      if (!phononLoaded) await loadLocalPhonon();
+      if (!phononVoice) { setPhononPreviewStatus('Select a voice first.'); return; }
+      const sample = await phononPreview({
+        text: 'Hello! This is a short preview of the selected Phonon voice.',
+        voice: phononVoice,
         speed: speechSpeed,
       });
       const url = URL.createObjectURL(sample);
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = url;
-      setKokoroPreviewUrl(url);
-      setKokoroPreviewStatus('Voice sample ready. Press play to listen.');
+      setPhononPreviewUrl(url);
+      setPhononPreviewStatus('Voice sample ready. Press play to listen.');
     } catch (error) {
-      console.error('Kokoro voice preview failed:', error);
-      setKokoroPreviewStatus(`Preview failed: ${error.message}`);
-    } finally { setKokoroPreviewing(false); }
+      console.error('Phonon voice preview failed:', error);
+      setPhononPreviewStatus(`Preview failed: ${error.message}`);
+    } finally { setPhononPreviewing(false); }
   };
 
   const approximateWordTimings = (text, duration) => {
@@ -287,10 +297,10 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
     });
   };
 
-  const generateKokoroNarration = async () => {
-    if (!kokoroLoaded) { setKokoroStatus('Load the Kokoro model first.'); return; }
-    if (!raw.length) { setKokoroStatus('Parse your script into scenes first.'); return; }
-    setKokoroGenerating(true);
+  const generatePhononNarration = async () => {
+    if (!phononLoaded) { setPhononStatus('Load the Phonon model first.'); return; }
+    if (!raw.length) { setPhononStatus('Parse your script into scenes first.'); return; }
+    setPhononGenerating(true);
     const audioBlobs = [];
     const updated = [];
     let approximateCount = 0;
@@ -298,21 +308,18 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
       if (!alignmentLoaded) await loadLocalAligner();
       for (let i = 0; i < raw.length; i++) {
         const scene = raw[i];
-        setKokoroStatus(`Generating Kokoro narration for scene ${i + 1} of ${raw.length}…`);
-        const audio = await generateKokoroAudio({
+        setPhononStatus(`Generating Phonon narration for scene ${i + 1} of ${raw.length}…`);
+        const { pcm, duration } = await phononSynthFloat({
           text: scene.text,
-          voice: kokoroVoice,
+          voice: phononVoice,
           speed: speechSpeed,
-          onProgress: (progress) => setKokoroStatus(`Scene ${i + 1}/${raw.length}: ${progress.message || 'Generating speech…'}`),
         });
-        const context = new AudioContext();
-        let duration;
-        try { duration = (await context.decodeAudioData(await audio.arrayBuffer())).duration; }
-        finally { await context.close(); }
+        const wavBlob = encodeWav(pcm, 24000);
+        const audio = wavBlob;
         let captionWords;
         try {
-          setKokoroStatus(`Analysing actual speech and synchronising words for scene ${i + 1} of ${raw.length}…`);
-          captionWords = await alignSpeechBlob(audio, scene.text, (progress) => setKokoroStatus(`Scene ${i + 1}/${raw.length}: ${progress.message || 'Aligning spoken words…'}`));
+          setPhononStatus(`Analysing actual speech and synchronising words for scene ${i + 1} of ${raw.length}…`);
+          captionWords = await alignSpeechBlob(audio, scene.text, (progress) => setPhononStatus(`Scene ${i + 1}/${raw.length}: ${progress.message || 'Aligning spoken words…'}`));
         } catch (alignmentError) {
           console.warn(`Word alignment fallback for scene ${i + 1}:`, alignmentError);
           approximateCount++;
@@ -324,14 +331,14 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
       const combinedFile = await combineAudioBlobs(audioBlobs, 1);
       setRaw(updated);
       loadAudio(combinedFile, setVoice);
-      setKokoroStatus(approximateCount
+      setPhononStatus(approximateCount
         ? `Narration generated. ${updated.length - approximateCount} scene(s) received audio-based word timing; ${approximateCount} scene(s) used approximate timing because speech matching was inconclusive.`
         : `Done! Generated ${updated.length} local scene narrations and synchronised captions using word timestamps detected from the actual audio.`);
       setTab('captions');
     } catch (error) {
-      console.error('Kokoro generation failed:', error);
-      setKokoroStatus(`Generation stopped: ${error.message}`);
-    } finally { setKokoroGenerating(false); }
+      console.error('Phonon generation failed:', error);
+      setPhononStatus(`Generation stopped: ${error.message}`);
+    } finally { setPhononGenerating(false); }
   };
 
   const syncToVoice = () => {
@@ -398,10 +405,10 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
               aiKeys={keys.aiKeys} onGenerateSpeech={generateAllSceneSpeech} generating={generatingSpeech} speechStatus={speechStatus}
               voiceName={voiceName} onVoiceName={setVoiceName} speechStyle={speechStyle} onSpeechStyle={setSpeechStyle}
               speechSpeed={speechSpeed} onSpeechSpeed={setSpeechSpeed}
-              kokoroLoaded={kokoroLoaded} kokoroLoading={kokoroLoading} kokoroGenerating={kokoroGenerating}
-              kokoroStatus={kokoroStatus} kokoroVoice={kokoroVoice} onKokoroVoice={setKokoroVoice}
-              onLoadKokoro={loadLocalKokoro} onLoadAligner={loadLocalAligner} alignmentLoaded={alignmentLoaded} alignmentLoading={alignmentLoading} onGenerateKokoro={generateKokoroNarration}
-              onPreviewKokoro={previewKokoroVoice} kokoroPreviewUrl={kokoroPreviewUrl} kokoroPreviewing={kokoroPreviewing} kokoroPreviewStatus={kokoroPreviewStatus}
+              phononLoaded={phononLoaded} phononLoading={phononLoading} phononGenerating={phononGenerating}
+              phononStatus={phononStatus} phononVoices={phononVoicesState} phononVoice={phononVoice} onPhononVoice={setPhononVoice}
+              onLoadPhonon={loadLocalPhonon} onGeneratePhonon={generatePhononNarration}
+              onPreviewPhonon={previewPhononVoice} phononPreviewUrl={phononPreviewUrl} phononPreviewing={phononPreviewing} phononPreviewStatus={phononPreviewStatus}
               onVoice={(f) => loadAudio(f, setVoice)} onBg={(f) => loadAudio(f, setBg)} onBgVol={setBgVol} />
           )}
         </Sidebar>

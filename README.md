@@ -116,19 +116,17 @@ To change a different scene, first click its block on the timeline (or move the 
 Audio tab
 • Voiceover: upload one narration file (MP3, WAV, M4A, OGG) for the whole video. Use the built-in player to check it, Sync Timeline to Audio to fit scene durations to it, and the trash button to remove it.
 • Background music: upload a music file. It loops for the whole video. The Music Volume slider (default 20%) sets how loud it is under the voiceover.
-Kokoro offline narration
+Phonon TTS narration
 
-The Audio tab includes a separate Kokoro Offline Voice panel alongside the existing Gemini option.
+The Audio tab includes a separate Phonon TTS panel alongside the existing Gemini option.
 
-1. While online, open Audio and click **Download / Load Model**. The first run downloads the Kokoro-82M q8 model files from Hugging Face.
-2. Keep the tab open while the model loads. The app uses the WASM runtime and q8 weights to reduce memory pressure on phones and 8 GB computers.
-3. Choose an American or British English voice and use the existing speaking-speed control.
-4. Click **Generate Narration**. Each scene is generated locally, then combined into one voiceover track and applied to the project.
-5. After the model has been cached by the browser, it can usually be loaded again without downloading it. Browser storage policies, cache eviction and available device memory still apply; offline availability is not guaranteed if the browser clears its cache.
+1. Open Audio and click **Load Phonon Model**. The first run downloads ~64 MB of model weights plus a voice file. Keep the tab open while it downloads; the browser caches it where storage allows.
+2. Choose a Phonon voice and use the existing speaking-speed control.
+3. Click **Test Voice** to hear a short sample, then click **Generate Narration + Auto-Sync Captions**. Each scene is generated locally, then combined into one voiceover track and applied to the project.
 
-Kokoro runs locally after its model assets are available and does not require a Gemini key. Unlike Gemini's transcription alignment, the current Kokoro workflow estimates word timings proportionally for animated captions. The resulting captions are useful for karaoke-style display but are not phoneme-accurate forced alignment. Gemini remains available for its existing word-alignment workflow.
+Phonon TTS runs entirely on the device after its model assets are available and does not require a Gemini key. It runs in a Web Worker so inference does not block the UI thread. The current Phonon workflow analyses generated speech through the separate Whisper word-sync model for caption timing; if word timing is unavailable or speech matching is too weak, that scene falls back to proportional timing and the status message reports the fallback instead of pretending it was accurate. Gemini remains available for its existing word-alignment workflow.
 
-The model is loaded in a Web Worker so inference does not run directly on the React UI thread. If a device runs out of memory or does not support the required browser features, use Gemini or upload a recorded narration instead.
+If the model fails to load, use Gemini or upload a recorded narration instead.
 
 6. Preview and timeline
 • Aspect buttons (16:9, 9:16, 1:1) change the shape of the preview and of the exported video. Use 16:9 for YouTube, 9:16 for Reels, Shorts and TikTok, and 1:1 for square posts.
@@ -249,7 +247,7 @@ This update adds the first foundation layer for the planned offline-first PWA:
 
 ### Current boundaries
 
-This is the foundation milestone, not the complete offline conversion. Pixabay video URLs are still URL references; selected footage is not yet downloaded into durable local project storage. The current FFmpeg loading path and external runtime dependencies also still need to be made fully offline-safe. Kokoro is not included yet. Project export currently packages project metadata and audio assets, not full video footage. Test production builds and Android device behavior before relying on it for production work.
+This is the foundation milestone, not the complete offline conversion. Pixabay video URLs are still URL references; selected footage is not yet downloaded into durable local project storage. The current FFmpeg loading path and external runtime dependencies also still need to be made fully offline-safe. Edge TTS requires the local server to be running. Project export currently packages project metadata and audio assets, not full video footage. Test production builds and Android device behavior before relying on it for production work.
 
 
 ## Android testing and PWA installation
@@ -272,16 +270,16 @@ The Pixabay tab now has two views: **Find videos** and **Downloads**.
 Saved clips are read from local browser storage for preview and FFmpeg export, so they can be reused without another network download. The media library is shared by projects in the same browser profile on the same device. It is not automatically included when exporting a project file, and clearing browser site data or uninstalling the browser can remove it. Browser storage limits vary by device. A Pixabay API key and internet connection are still needed to search and download new clips. Some remote video hosts may block browser downloads; when that happens the app displays an error instead of silently claiming the clip was saved.
 
 
-## Phase 4 — Kokoro voice preview, offline word timing, and resource links
+## Phase 4 — Edge TTS narration, voice preview, and word timing
 
-- Added a voice preview action and an audio player so users can listen to each selected Kokoro voice before generating full narration.
+- Added a voice preview action and an audio player so users can listen to each selected Edge TTS voice before generating full narration.
 - Added a separate Whisper tiny timestamped ONNX model through Transformers.js. It runs in a Web Worker with WASM and q8 weights. Users can explicitly download/load the sync model before going offline; later use is browser-cached where storage permits.
-- Kokoro scene audio is analysed locally for word-level timestamps. The recognised words are aligned back to the scene script. If speech matching is too weak or alignment fails, that scene falls back to proportional timing and the status message reports the fallback instead of pretending it was accurate.
+- Edge TTS scene audio returns word-level timestamps directly from the Microsoft Edge service. The recognised words are aligned back to the scene script. If word timing is unavailable or speech matching is too weak, that scene falls back to proportional timing and the status message reports the fallback instead of pretending it was accurate.
 - Added a Resources tab with external links for Pixabay, Vecteezy, Shutterstock, Envato Elements, Internet Archive, LottieFiles, and Mixkit, including licence reminders. The tab does not scrape or redistribute third-party catalogues.
 
 ### Important alignment notes
 
-Whisper provides audio-derived word timestamps, not a mathematical guarantee of perfect forced alignment. Its word boundaries can be off by roughly a tenth of a second or more, especially on short function words, accents, or noisy audio. Users should review and adjust captions when exact frame-level timing matters. The sync model is a separate first-time download from Kokoro and is processed locally after download.
+Edge TTS word timestamps are model-predicted and are good for caption synchronisation, but they are not a mathematical guarantee of perfect forced alignment. Word boundaries can be off by roughly a tenth of a second or more, especially on short function words, accents, or noisy audio. Users should review and adjust captions when exact frame-level timing matters.
 
 ### Install and build
 

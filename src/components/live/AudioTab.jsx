@@ -1,6 +1,6 @@
 const fmt = (d) => (d ? `${d.toFixed(1)}s` : '');
 
-export default function AudioTab({ voice, bg, bgVol, onVoice, onBg, onBgVol, onSync, aiKeys = [], onGenerateSpeech, generating, speechStatus, voiceName, onVoiceName, speechStyle, onSpeechStyle, speechSpeed, onSpeechSpeed, kokoroLoaded, kokoroLoading, kokoroStatus, kokoroVoice, onKokoroVoice, onLoadKokoro, onLoadAligner, alignmentLoaded, alignmentLoading, onGenerateKokoro, kokoroGenerating, onPreviewKokoro, kokoroPreviewUrl, kokoroPreviewing, kokoroPreviewStatus }) {
+export default function AudioTab({ voice, bg, bgVol, onVoice, onBg, onBgVol, onSync, aiKeys = [], onGenerateSpeech, generating, speechStatus, voiceName, onVoiceName, speechStyle, onSpeechStyle, speechSpeed, onSpeechSpeed, phononLoaded, phononLoading, phononGenerating, phononStatus, phononVoices, phononVoice, onPhononVoice, onLoadPhonon, onGeneratePhonon, onPreviewPhonon, phononPreviewUrl, phononPreviewing, phononPreviewStatus }) {
   return (
     <div className="space-y-4">
       <div className="p-3.5 rounded-xl border border-indigo-500/30 bg-indigo-950/20 space-y-3">
@@ -53,30 +53,29 @@ export default function AudioTab({ voice, bg, bgVol, onVoice, onBg, onBgVol, onS
         {speechStatus && <p className="text-[10px] text-slate-300 leading-relaxed">{speechStatus}</p>}
       </div>
 
-      <div className="p-3.5 rounded-xl border border-violet-500/30 bg-violet-950/10 space-y-3">
+      <div className="p-3.5 rounded-xl border border-sky-500/30 bg-sky-950/10 space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2"><i className="fa-solid fa-microchip text-violet-300"></i><span className="text-xs font-bold text-slate-100">Kokoro Offline Voice</span></div>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${kokoroLoaded ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' : 'text-violet-200 bg-violet-500/10 border-violet-500/30'}`}>{kokoroLoaded ? 'Model ready' : 'Local AI'}</span>
+          <div className="flex items-center gap-2"><i className="fa-solid fa-cloud-arrow-down text-sky-300"></i><span className="text-xs font-bold text-slate-100">Phonon TTS Narration</span></div>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${phononLoaded ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' : 'text-sky-200 bg-sky-500/10 border-sky-500/30'}`}>{phononLoaded ? 'Model ready' : 'Local AI'}</span>
         </div>
-        <p className="text-[11px] text-slate-400 leading-relaxed">Generate narration on this device without an AI API key. Download the Kokoro model once while online. Automatic caption sync also downloads a separate compact Whisper word-timing model on first use; both are cached by the browser where storage allows.</p>
-        <label className="block text-[10px] text-slate-400">Kokoro voice
+        <p className="text-[11px] text-slate-400 leading-relaxed">Generate narration entirely on this device using Phonon TTS. No API key, no server, no internet required after the first model download. The model is ~64 MB and is cached by the browser where storage allows.</p>
+        <label className="block text-[10px] text-slate-400">Phonon voice
           <div className="mt-1 flex gap-2">
-          <select value={kokoroVoice} onChange={(e) => onKokoroVoice(e.target.value)} className="min-w-0 flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200">
-            <optgroup label="American English"><option value="af_heart">Heart · Female</option><option value="af_bella">Bella · Female</option><option value="af_nicole">Nicole · Female</option><option value="af_sarah">Sarah · Female</option><option value="af_sky">Sky · Female</option><option value="am_adam">Adam · Male</option><option value="am_michael">Michael · Male</option><option value="am_puck">Puck · Male</option></optgroup>
-            <optgroup label="British English"><option value="bf_emma">Emma · Female</option><option value="bf_alice">Alice · Female</option><option value="bm_george">George · Male</option><option value="bm_lewis">Lewis · Male</option></optgroup>
+          <select value={phononVoice} onChange={(e) => onPhononVoice(e.target.value)} className="min-w-0 flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200">
+            <option value="">Select a voice…</option>
+            {(phononVoices || []).map((v) => (
+              <option key={v.name} value={v.name}>{v.label}</option>
+            ))}
           </select>
-          <button type="button" onClick={onPreviewKokoro} disabled={kokoroPreviewing || kokoroGenerating || kokoroLoading} className="shrink-0 px-3 rounded-lg border border-violet-500/40 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20 disabled:opacity-50 text-xs font-semibold"><i className={`fa-solid ${kokoroPreviewing ? 'fa-spinner fa-spin' : 'fa-play'} mr-1.5`}></i>{kokoroPreviewing ? 'Creating…' : 'Preview voice'}</button>
+          <button type="button" onClick={onPreviewPhonon} disabled={phononPreviewing || phononGenerating || phononLoading} className="shrink-0 px-3 rounded-lg border border-sky-500/40 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20 disabled:opacity-50 text-xs font-semibold"><i className={`fa-solid ${phononPreviewing ? 'fa-spinner fa-spin' : 'fa-play'} mr-1.5`}></i>{phononPreviewing ? 'Creating…' : 'Test Voice'}</button>
           </div>
         </label>
-        {kokoroPreviewStatus && <p className="text-[10px] text-slate-300">{kokoroPreviewStatus}</p>}
-        {kokoroPreviewUrl && <audio key={kokoroPreviewUrl} controls preload="none" src={kokoroPreviewUrl} className="w-full h-8" />}
+        {phononPreviewStatus && <p className="text-[10px] text-slate-300">{phononPreviewStatus}</p>}
+        {phononPreviewUrl && <audio key={phononPreviewUrl} controls preload="none" src={phononPreviewUrl} className="w-full h-8" />}
         <p className="text-[10px] text-slate-500">Preview uses a short sample so you can compare voices before generating the full narration.</p>
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={onLoadKokoro} disabled={kokoroLoaded || kokoroLoading} className="py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-bold"><i className={`fa-solid ${kokoroLoading ? 'fa-spinner fa-spin' : 'fa-cloud-arrow-down'} mr-1.5`}></i>{kokoroLoaded ? 'Kokoro Ready' : kokoroLoading ? 'Loading…' : 'Download Kokoro'}</button>
-          <button onClick={onLoadAligner} disabled={alignmentLoaded || alignmentLoading} className="py-2.5 rounded-lg bg-sky-700 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-bold"><i className={`fa-solid ${alignmentLoading ? 'fa-spinner fa-spin' : 'fa-wave-square'} mr-1.5`}></i>{alignmentLoaded ? 'Sync Model Ready' : alignmentLoading ? 'Loading…' : 'Download Sync Model'}</button>
-        </div>
-        <button onClick={onGenerateKokoro} disabled={!kokoroLoaded || kokoroGenerating || alignmentLoading} className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-bold"><i className={`fa-solid ${kokoroGenerating ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} mr-2`}></i>{kokoroGenerating ? 'Generating & syncing…' : 'Generate Narration + Auto-Sync Captions'}</button>
-        {kokoroStatus && <p className="text-[10px] text-slate-300 leading-relaxed break-words">{kokoroStatus}</p>}
+        <button onClick={onLoadPhonon} disabled={phononLoaded || phononLoading} className="w-full py-2.5 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-xs font-bold"><i className={`fa-solid ${phononLoading ? 'fa-spinner fa-spin' : 'fa-cloud-arrow-down'} mr-1.5`}></i>{phononLoaded ? 'Model Ready' : phononLoading ? 'Loading model…' : 'Load Phonon Model'}</button>
+        <button onClick={onGeneratePhonon} disabled={!phononLoaded || !phononVoice || phononGenerating || phononLoading} className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-bold"><i className={`fa-solid ${phononGenerating ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} mr-2`}></i>{phononGenerating ? 'Generating & syncing…' : 'Generate Narration + Auto-Sync Captions'}</button>
+        {phononStatus && <p className="text-[10px] text-slate-300 leading-relaxed break-words">{phononStatus}</p>}
         <p className="text-[10px] text-slate-500">Uses the compact q8 model with WebAssembly for better compatibility on phones and lower-memory computers. First download may take a while. Keep this tab open.</p>
       </div>
 

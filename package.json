@@ -11,13 +11,14 @@
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.10",
     "@ffmpeg/util": "^0.12.1",
+    "@huggingface/transformers": "^3.8.1",
+    "phonon-tts": "^0.7.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "kokoro-js": "^1.2.1",
-    "@huggingface/transformers": "^3.8.1"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
+    "playwright-core": "^1.65.0",
     "vite": "^6.0.0"
   }
 }
