@@ -93,12 +93,59 @@ export function phononIsLoaded() {
   return !!instance;
 }
 
+/** Returns approximate cache info for display in Settings. */
+export async function phononCacheInfo() {
+  let cacheSize = 0;
+  try {
+    if (typeof caches !== 'undefined') {
+      const keys = await caches.keys();
+      for (const key of keys) {
+        if (key.includes('phonon') || key.includes('huggingface') || key.includes('hf')) {
+          const cache = await caches.open(key);
+          const entries = await cache.keys();
+          for (const req of entries) {
+            const resp = await cache.match(req);
+            if (resp) {
+              const cloned = resp.clone();
+              const blob = await cloned.blob();
+              cacheSize += blob.size;
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read Phonon cache size:', e);
+  }
+  return { cacheSize, loaded: !!instance };
+}
+
 export async function phononClearCache() {
-  instance?.dispose();
-  instance = null;
+  // Only clear if not actively generating.
+  if (instance) {
+    try { instance.dispose(); } catch (e) { console.warn('Phonon dispose during clear:', e); }
+    instance = null;
+  }
   loadingPromise = null;
   loadProgress = '';
-  await clearCache();
+  try {
+    await clearCache();
+  } catch (e) {
+    console.warn('Phonon cache clear partially failed:', e);
+  }
+  // Also clear the browser Cache Storage entries for phonon/huggingface.
+  try {
+    if (typeof caches !== 'undefined') {
+      const keys = await caches.keys();
+      for (const key of keys) {
+        if (key.includes('phonon') || key.includes('huggingface') || key.includes('hf-')) {
+          await caches.delete(key);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Could not delete Phonon Cache Storage entries:', e);
+  }
 }
 
 export function phononDispose() {

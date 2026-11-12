@@ -38,6 +38,41 @@ export async function loadSpeechAligner(onProgress) {
   return true;
 }
 
+/** Clear the cached Whisper model from the browser cache. Safe to call when the
+ *  worker is not actively aligning. The model will be re-downloaded on next use. */
+export async function clearSpeechAlignerCache() {
+  try {
+    // Clear the transformers browser cache for the Whisper model.
+    if (typeof caches !== 'undefined') {
+      const keys = await caches.keys();
+      for (const key of keys) {
+        if (key.includes('transformers') || key.includes('whisper') || key.includes('onnx')) {
+          await caches.delete(key);
+        }
+      }
+    }
+    // Also clear the IndexedDB cache used by @huggingface/transformers.
+    if (typeof indexedDB !== 'undefined') {
+      try {
+        const dbs = ['transformers-cache', 'huggingface-transformers', 'onnxruntime-cache'];
+        for (const name of dbs) {
+          try { indexedDB.deleteDatabase(name); } catch {}
+        }
+      } catch {}
+    }
+  } catch (error) {
+    console.warn('Whisper cache clear partially failed:', error);
+  }
+}
+
+/** Dispose the alignment worker and free its memory. */
+export function disposeSpeechAligner() {
+  if (worker) {
+    worker.terminate();
+    worker = null;
+  }
+}
+
 function resampleTo16k(buffer) {
   const sourceRate = buffer.sampleRate;
   const length = Math.max(1, Math.ceil(buffer.duration * 16000));

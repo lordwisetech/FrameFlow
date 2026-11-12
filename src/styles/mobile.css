@@ -1,0 +1,202 @@
+/* FrameFlow responsive studio workspace */
+:root { color-scheme: dark; }
+html, body, #root { width: 100%; min-height: 100%; margin: 0; }
+body { overflow: hidden; }
+.studio-shell { height: 100dvh; min-height: 0; background: #0b0a14; display: flex; flex-direction: column; }
+.studio-header { flex: 0 0 56px; }
+.studio-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex !important;
+  flex-direction: row !important;
+  overflow: hidden;
+}
+.studio-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.studio-preview { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; }
+.studio-preview-frame { max-width: 100%; }
+.studio-timeline {
+  flex: 0 0 auto;
+  height: 220px;
+  max-height: 34vh;
+  min-height: 150px;
+}
+.studio-sidebar {
+  flex: 0 0 384px;
+  width: 384px !important;
+  max-width: 384px !important;
+  min-width: 384px !important;
+  height: 100% !important;
+  max-height: none !important;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #11101c;
+  border-right: 1px solid #29263a;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.studio-tab-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+}
+.studio-tabbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 12px;
+  background: #090812;
+  border-top: 1px solid #29263a;
+  scrollbar-width: thin;
+  justify-content: center;
+}
+.studio-tabbar button {
+  flex: 0 0 110px;
+  min-width: 110px;
+  min-height: 48px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #a5a2b5;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.1;
+  cursor: pointer;
+}
+.studio-tabbar button i { font-size: 16px; }
+.studio-tabbar button.active {
+  color: #c8c3ff;
+  background: #252044;
+  border-color: #5146a5;
+}
+.studio-tabbar button:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid #8b80ff;
+  outline-offset: 2px;
+}
+.ai-director-workspace { width: 100%; max-width: 100%; min-height: 480px; }
+.ai-director-workspace > div { min-width: 0; }
+.ai-director-workspace textarea { font-size: 14px; }
+.studio-tab-content::-webkit-scrollbar, .studio-timeline::-webkit-scrollbar { width: 5px; height: 5px; }
+.studio-tab-content::-webkit-scrollbar-thumb, .studio-timeline::-webkit-scrollbar-thumb { background: #45415c; border-radius: 8px; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+
+/* MOBILE: Timeline always visible, sidebar slides up from bottom */
+@media (max-width: 768px) {
+  .studio-shell {
+    height: 100dvh;
+  }
+  .studio-header { height: 52px !important; flex-basis: 52px; padding: 0 10px !important; }
+  .header-project-meta { display: none !important; }
+  .studio-settings-btn span, .studio-export-btn span { display: none !important; }
+  .studio-settings-btn, .studio-export-btn { min-width: 42px; min-height: 42px; padding: 0 9px !important; }
+  
+  /* Workspace becomes column on mobile */
+  .studio-workspace {
+    flex-direction: column !important;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+  .studio-workspace.has-open-panel {
+    padding-bottom: calc(60vh + env(safe-area-inset-bottom));
+  }
+  
+  /* Main area: preview + timeline (always visible) */
+  .studio-main { flex: 1 1 auto !important; min-height: 0; display: flex; flex-direction: column; }
+  .studio-preview { padding: 4px 4px 0 4px !important; flex: 1 1 auto; min-height: 0; }
+  .studio-preview-frame { width: 100% !important; height: auto !important; max-width: 100%; transition: all 0.3s ease; }
+  
+  /* Timeline - always visible, fixed height, horizontally scrollable */
+  .studio-timeline { 
+    height: 160px; 
+    min-height: 120px; 
+    max-height: 22vh; 
+    flex: 0 0 auto;
+    position: relative;
+    z-index: 10;
+  }
+  .studio-timeline > div:first-child { min-height: 38px; height: 38px; padding: 0 8px; }
+  .studio-timeline > div:nth-child(2) { padding: 6px; }
+  .studio-timeline .relative { min-width: 560px; }
+  
+  /* Sidebar - slides up from bottom, tab bar fixed at bottom */
+  .studio-sidebar {
+    position: fixed !important;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    max-height: calc(60vh + env(safe-area-inset-bottom));
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    border-right: none !important;
+    border-top: 1px solid #29263a;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.4);
+    background: #11101c;
+  }
+  .studio-sidebar.is-collapsed {
+    max-height: calc(64px + env(safe-area-inset-bottom)) !important;
+  }
+  .studio-sidebar.has-content {
+    max-height: calc(60vh + env(safe-area-inset-bottom)) !important;
+  }
+  .studio-tab-content { 
+    padding: 10px; 
+    max-height: calc(60vh - 70px);
+    overflow-y: auto;
+  }
+  .studio-tabbar {
+    padding: 7px max(8px, env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    border-top: 1px solid #29263a;
+    background: #090812;
+  }
+  .studio-tabbar button {
+    flex: 0 0 76px;
+    min-width: 64px;
+    font-size: 10px;
+  }
+  .studio-tabbar button i { font-size: 15px; }
+  .ai-director-workspace { min-height: 400px; }
+  .settings-modal-mobile { max-width: calc(100vw - 20px); max-height: calc(100dvh - 20px); margin: 10px; }
+  input, textarea, select { font-size: 16px; }
+}
+
+@media (min-width: 769px) {
+  .studio-header { height: 56px; }
+  .studio-sidebar { 
+    position: relative !important;
+    flex: 0 0 384px;
+    width: 384px !important;
+    max-width: 384px !important;
+    min-width: 384px !important;
+    max-height: none !important;
+    border-top: none !important;
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  .studio-tabbar { justify-content: center; }
+  .studio-tabbar button { flex-basis: 110px; }
+  .studio-timeline { height: 230px; max-height: 30vh; }
+  .studio-workspace { padding-bottom: 0 !important; }
+}

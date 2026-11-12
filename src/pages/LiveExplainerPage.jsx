@@ -22,9 +22,15 @@ import { loadPhononModel, phononSynthFloat, phononPreview, phononIsLoaded, phono
 import { loadSpeechAligner, alignSpeechBlob } from '../services/speechAlignment';
 import { saveProject } from '../services/projectStore';
 
-const loadAudio = (file, set) => {
-  if (!file) return set(null);
+const loadAudio = (file, set, prevUrlRef) => {
+  if (!file) {
+    if (prevUrlRef?.current) { URL.revokeObjectURL(prevUrlRef.current); prevUrlRef.current = ''; }
+    return set(null);
+  }
+  // Revoke the previous object URL before creating a new one.
+  if (prevUrlRef?.current) { URL.revokeObjectURL(prevUrlRef.current); prevUrlRef.current = ''; }
   const url = URL.createObjectURL(file);
+  prevUrlRef.current = url;
   const a = new Audio(url);
   a.onloadedmetadata = () => set({ url, file, name: file.name, duration: a.duration });
 };
@@ -38,7 +44,7 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
   const total = useMemo(() => scenes.reduce((a, s) => a + s.duration, 0), [scenes]);
 
   const [script, setScript] = useState(initial.script || DEFAULT_SCRIPT);
-  const [tab, setTab] = useState('script');
+  const [tab, setTab] = useState(null);
   const [aspect, setAspect] = useState(initial.aspect || '16:9');
   const [voice, setVoice] = useState(() => initial.voiceBlob ? { url: URL.createObjectURL(initial.voiceBlob), file: new File([initial.voiceBlob], 'saved-narration.mp3', { type: initial.voiceBlob.type || 'audio/mpeg' }), name: 'Saved narration', duration: 0 } : null);
   const [bg, setBg] = useState(() => initial.bgBlob ? { url: URL.createObjectURL(initial.bgBlob), file: new File([initial.bgBlob], 'saved-background.mp3', { type: initial.bgBlob.type || 'audio/mpeg' }), name: 'Saved background audio', duration: 0 } : null);
@@ -93,6 +99,30 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
     aiKeys,
   };
 });
+
+  const voiceUrlRef = useRef(voice?.url || '');
+  const bgUrlRef = useRef(bg?.url || '');
+
+  useEffect(() => { voiceUrlRef.current = voice?.url || ''; }, [voice]);
+  useEffect(() => { bgUrlRef.current = bg?.url || ''; }, [bg]);
+  // Cleanup: revoke the initial voice blob URL when the component unmounts.
+  useEffect(() => () => {
+    if (voiceUrlRef.current && voiceUrlRef.current.startsWith('blob:')) {
+      URL.revokeObjectURL(voiceUrlRef.current);
+      voiceUrlRef.current = '';
+    }
+  }, []);
+  // Cleanup: revoke the initial background blob URL when the component unmounts.
+  useEffect(() => () => {
+    if (bgUrlRef.current && bgUrlRef.current.startsWith('blob:')) {
+      URL.revokeObjectURL(bgUrlRef.current);
+      bgUrlRef.current = '';
+    }
+  }, []);
+  // Cleanup: revoke the preview URL when the component unmounts.
+  useEffect(() => () => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+  }, []);
 
   const pb = usePlayback(total);
   const pool = useVideoPool(scenes);
@@ -214,7 +244,7 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
       }
       const combinedFile = await combineAudioBlobs(audioBlobs, speechSpeed);
       setRaw(updated);
-      loadAudio(combinedFile, setVoice);
+      loadAudio(combinedFile, setVoice, voiceUrlRef);
       setSpeechStatus(`Done! Generated ${updated.length} scene narrations and synchronized word captions.`);
       setTab('captions');
     } catch (error) {
@@ -274,8 +304,9 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
         voice: phononVoice,
         speed: speechSpeed,
       });
-      const url = URL.createObjectURL(sample);
+      // Revoke the previous preview URL before creating a new one.
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      const url = URL.createObjectURL(sample);
       previewUrlRef.current = url;
       setPhononPreviewUrl(url);
       setPhononPreviewStatus('Voice sample ready. Press play to listen.');
@@ -330,7 +361,7 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
       }
       const combinedFile = await combineAudioBlobs(audioBlobs, 1);
       setRaw(updated);
-      loadAudio(combinedFile, setVoice);
+      loadAudio(combinedFile, setVoice, voiceUrlRef);
       setPhononStatus(approximateCount
         ? `Narration generated. ${updated.length - approximateCount} scene(s) received audio-based word timing; ${approximateCount} scene(s) used approximate timing because speech matching was inconclusive.`
         : `Done! Generated ${updated.length} local scene narrations and synchronised captions using word timestamps detected from the actual audio.`);
@@ -387,7 +418,9 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
   return (
     <div className="studio-shell h-full flex flex-col overflow-hidden select-none">
       <StudioHeader onBack={onBack} onSettings={() => setShowSettings(true)} onExport={doExport} exporting={!!exp} projectName={projectName} onRename={setProjectName} saveStatus={saveStatus} />
-      <div className="studio-workspace flex-1 flex overflow-hidden">
+      
+      <div className={`studio-workspace flex-1 flex overflow-hidden relative min-h-0 ${tab ? 'has-open-panel' : ''}`}>
+        {/* Desktop: Sidebar on left, Main on right | Mobile: Main on top, Sidebar at bottom */}
         <Sidebar tab={tab} onTab={setTab}>
           {tab === 'script' && <ScriptTab script={script} onChange={setScript} onParse={parse} />}
           {tab === 'scenes' && (
@@ -400,6 +433,7 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
               onApply={(asset) => active && updateScene(active.id, { videoUrl: asset.sourceUrl, localMediaId: asset.id })} />
           )}
           {tab === 'captions' && <CaptionSettings value={caption} onChange={setCaption} />}
+          {tab === 'ai-director' && <AIDirector embedded keys={keys.aiKeys || []} editorContext={aiEditorContext} onApplyAction={applyAIAction} onOpenSettings={() => setShowSettings(true)} />}
           {tab === 'audio' && (
             <AudioTab voice={voice} bg={bg} bgVol={bgVol} onSync={syncToVoice}
               aiKeys={keys.aiKeys} onGenerateSpeech={generateAllSceneSpeech} generating={generatingSpeech} speechStatus={speechStatus}
@@ -409,41 +443,38 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
               phononStatus={phononStatus} phononVoices={phononVoicesState} phononVoice={phononVoice} onPhononVoice={setPhononVoice}
               onLoadPhonon={loadLocalPhonon} onGeneratePhonon={generatePhononNarration}
               onPreviewPhonon={previewPhononVoice} phononPreviewUrl={phononPreviewUrl} phononPreviewing={phononPreviewing} phononPreviewStatus={phononPreviewStatus}
-              onVoice={(f) => loadAudio(f, setVoice)} onBg={(f) => loadAudio(f, setBg)} onBgVol={setBgVol} />
+              onVoice={(f) => loadAudio(f, setVoice, voiceUrlRef)} onBg={(f) => loadAudio(f, setBg, bgUrlRef)} onBgVol={setBgVol} />
           )}
         </Sidebar>
-        <main className="studio-main flex-1 flex flex-col bg-slate-950 relative overflow-hidden">
+        
+        {/* Main content area: Preview + Timeline */}
+        <main className="studio-main flex-1 flex flex-col bg-slate-950 relative overflow-hidden min-h-0">
           <PreviewPlayer active={active} pool={pool} aspect={aspect} onAspect={setAspect} caption={caption} time={pb.time} />
           <Timeline scenes={scenes} total={total} time={pb.time} playing={pb.playing} hasVoice={!!voice}
             onToggle={pb.toggle} onStop={pb.stop} onRestart={() => pb.seek(0)} onSeek={pb.seek}
             onResize={(id, d) => updateScene(id, { duration: d })} />
         </main>
       </div>
+      
       {showSettings && (
         <SettingsModal keys={keys} onClose={() => setShowSettings(false)}
+          onClearAiCache={() => {
+            setPhononLoaded(false);
+            setAlignmentLoaded(false);
+            setPhononStatus('AI model cache cleared. Load the Phonon model again when ready to generate.');
+          }}
           onSave={(k) => {
-  setKeys(k);
-
-  localStorage.setItem('pixabay_key', k.pixabay);
-  localStorage.setItem('coverr_key', k.coverr || '');
-  localStorage.setItem('ai_api_keys', JSON.stringify(k.aiKeys));
-
-  // Keep the old OpenRouter setting compatible.
-  const firstOpenRouter = k.aiKeys.find(
-    (item) => item.provider === 'openrouter'
-  );
-
-  if (firstOpenRouter) {
-    localStorage.setItem('openrouter_key', firstOpenRouter.key);
-  } else {
-    localStorage.removeItem('openrouter_key');
-  }
-
-  setShowSettings(false);
-}} />
+            setKeys(k);
+            localStorage.setItem('pixabay_key', k.pixabay);
+            localStorage.setItem('coverr_key', k.coverr || '');
+            localStorage.setItem('ai_api_keys', JSON.stringify(k.aiKeys));
+            const firstOpenRouter = k.aiKeys.find((item) => item.provider === 'openrouter');
+            if (firstOpenRouter) localStorage.setItem('openrouter_key', firstOpenRouter.key);
+            else localStorage.removeItem('openrouter_key');
+            setShowSettings(false);
+          }} />
       )}
       {exp && <ExportOverlay progress={exp.p} label={exp.label} />}
-      <AIDirector keys={keys.aiKeys || []} editorContext={aiEditorContext} onApplyAction={applyAIAction} onOpenSettings={() => setShowSettings(true)} />
     </div>
   );
 }

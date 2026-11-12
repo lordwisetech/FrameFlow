@@ -1,35 +1,44 @@
 import { useEffect, useRef } from 'react';
-import { getClipBlob } from '../utils/helpers';
 
 // Keeps one hidden <video> per scene, keyed by scene id. Returns a ref: pool.current[id].video
+// Videos stream directly from their source URL during preview. IndexedDB blobs are only
+// fetched on demand (e.g. for export) via getClipBlob(), not eagerly cached here.
 export default function useVideoPool(scenes) {
   const pool = useRef({});
 
   useEffect(() => {
     const ids = new Set(scenes.map((s) => s.id));
     Object.keys(pool.current).forEach((id) => {
-      if (!ids.has(id)) { pool.current[id].video.removeAttribute('src'); if (pool.current[id].objectUrl) URL.revokeObjectURL(pool.current[id].objectUrl); delete pool.current[id]; }
+      if (!ids.has(id)) {
+        const entry = pool.current[id];
+        if (entry) {
+          entry.video.removeAttribute('src');
+          if (entry.objectUrl) URL.revokeObjectURL(entry.objectUrl);
+        }
+        delete pool.current[id];
+      }
     });
     scenes.forEach((s) => {
-      if (pool.current[s.id]?.url === s.videoUrl && pool.current[s.id]?.localMediaId === s.localMediaId) return;
-      if (pool.current[s.id]?.objectUrl) URL.revokeObjectURL(pool.current[s.id].objectUrl);
+      const existing = pool.current[s.id];
+      // If the same scene with the same URL and media id, keep it.
+      if (existing && existing.url === s.videoUrl && existing.localMediaId === s.localMediaId) return;
+      // Otherwise tear down the old entry and create a new one.
+      if (existing && existing.objectUrl) URL.revokeObjectURL(existing.objectUrl);
       const v = document.createElement('video');
       Object.assign(v, { muted: true, loop: true, playsInline: true, preload: 'auto', crossOrigin: 'anonymous' });
       // If CORS blocks the clip, still let it play in the preview (export will use a black frame)
       v.onerror = () => { if (v.crossOrigin) { v.removeAttribute('crossorigin'); v.src = s.videoUrl; v.load(); } };
       const entry = { video: v, url: s.videoUrl, localMediaId: s.localMediaId, objectUrl: null };
       pool.current[s.id] = entry;
-      getClipBlob(s.videoUrl, s.localMediaId).then((b) => {
-        if (pool.current[s.id] === entry) {
-          if (b) { entry.objectUrl = URL.createObjectURL(b); v.src = entry.objectUrl; }
-          else v.src = s.videoUrl;
-        }
-      });
+      // Stream directly from the source URL. No IndexedDB download during preview.
+      v.src = s.videoUrl;
+      v.load();
     });
   }, [scenes]);
 
   useEffect(() => () => {
     Object.values(pool.current).forEach((entry) => {
+      if (!entry) return;
       entry.video.removeAttribute('src');
       if (entry.objectUrl) URL.revokeObjectURL(entry.objectUrl);
     });

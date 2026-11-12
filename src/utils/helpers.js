@@ -22,9 +22,9 @@ So the real question is: how much of what you read today was actually created by
 
 // preview = on-screen size, out = exported video size (even numbers for H.264)
 export const ASPECTS = {
-  '16:9': { preview: [640, 360], out: [854, 480] },
-  '9:16': { preview: [240, 426], out: [480, 854] },
-  '1:1': { preview: [360, 360], out: [576, 576] },
+  '16:9': { preview: [800, 450], out: [854, 480] },
+  '9:16': { preview: [300, 533], out: [480, 854] },
+  '1:1': { preview: [450, 450], out: [576, 576] },
 };
 
 export const formatTime = (s) =>
