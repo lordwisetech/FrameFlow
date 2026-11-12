@@ -1,5 +1,20 @@
 import { PhononTTS, encodeWav, concatPcm, clearCache } from 'phonon-tts';
 
+// Resolve the public Phonon 31m checkpoint through its static file URLs rather
+// than the Hugging Face Hub metadata API. Some mobile browser/network stacks
+// fail the Hub's API lookup even though the actual model files are CORS-readable.
+// Keep the files on a single pinned checkpoint revision so config, tokenizer,
+// weights and voice can never drift independently.
+const PHONON_MODEL_REVISION = '92741c5';
+const PHONON_MODEL_BASE = `https://huggingface.co/gradium/phonon-31m-en/resolve/${PHONON_MODEL_REVISION}`;
+const PHONON_MODEL = {
+  weights: { q8: `${PHONON_MODEL_BASE}/model.q8.gguf` },
+  tokenizer: `${PHONON_MODEL_BASE}/tokenizer.json`,
+  config: `${PHONON_MODEL_BASE}/config.json`,
+  voices: { default: `${PHONON_MODEL_BASE}/default-voice.safetensors` },
+  defaultVoice: 'default',
+};
+
 let instance = null;
 let loadingPromise = null;
 let loadProgress = '';
@@ -36,8 +51,14 @@ export async function loadPhononModel({ onProgress, quant = 'q8' } = {}) {
     try {
       instance = await PhononTTS.load({
         lang: 'en',
+        model: PHONON_MODEL,
         quant,
         voices: ['default'],
+        // One worker thread is the most portable path: no SharedArrayBuffer,
+        // COOP/COEP headers, or cross-origin-isolated deployment is required.
+        // Phonon automatically selects its Safari/iOS-compatible SIMD build.
+        threads: 1,
+        device: 'cpu',
         onProgress: (p) => {
           loadProgress = `${p.file}: ${p.loaded}/${p.total ?? '?'}${p.cached ? ' (cached)' : ''}`;
           onProgress?.(loadProgress);
