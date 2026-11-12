@@ -1,4 +1,5 @@
 Explainer Studio Pro: How It Works and How to Write Your Script
+this program was build by Mayowa he is the brain behind this project
 
 A guide to the Live Explainer Video studio: what each part does, how a script becomes a finished MP4, and how to write scripts that turn out well.
 1. What the program does
