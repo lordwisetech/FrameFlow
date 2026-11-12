@@ -4,14 +4,14 @@ import { formatTime } from '../../utils/helpers';
 export default function Timeline({ scenes, total, time, playing, hasVoice, onToggle, onStop, onRestart, onSeek, onResize }) {
   const wrap = useRef(null);
   const [isMobile, setIsMobile] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const pct = total ? (time / total) * 100 : 0;
 
   useEffect(() => {
     const check = () => {
       const mobile = window.innerWidth < 769;
       setIsMobile(mobile);
-      if (!mobile) setExpanded(true);
+      setExpanded(true);
     };
     check();
     window.addEventListener('resize', check);
@@ -42,8 +42,8 @@ export default function Timeline({ scenes, total, time, playing, hasVoice, onTog
 
   return (
     <div className={`studio-timeline border-t border-slate-800 bg-slate-900 flex flex-col shrink-0 transition-all duration-300 ${isMobile ? (expanded ? 'h-[60vh]' : 'h-14') : 'h-64'}`}>
-      <div className={`h-12 border-b border-slate-800/80 px-3 sm:px-4 flex items-center justify-between text-xs text-slate-300 bg-slate-950/60 ${isMobile ? 'cursor-pointer' : ''}`}
-           onClick={() => isMobile && setExpanded(!expanded)}>
+      <div className={`h-12 border-b border-slate-800/80 px-3 sm:px-4 flex items-center justify-between text-xs text-slate-300 bg-slate-950/60 `}
+>
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={(e) => { e.stopPropagation(); onToggle(); }}
@@ -70,18 +70,16 @@ export default function Timeline({ scenes, total, time, playing, hasVoice, onTog
             <i className="fa-solid fa-hand-pointer text-indigo-400 mr-1"></i>
             Drag scene blocks horizontally
           </span>
-          {isMobile && (
-            <i className={`fa-solid ${expanded ? 'fa-chevron-up' : 'fa-chevron-down'} text-slate-400 text-sm`}></i>
-          )}
+          {isMobile && <span className="text-[10px] text-slate-400">TIMELINE</span>}
         </div>
       </div>
 
-      <div className={`flex-1 overflow-x-auto select-none bg-slate-950/80 transition-all ${isMobile ? (expanded ? 'p-3 opacity-100' : 'opacity-0 h-0') : 'p-4'}`}>
-        <div ref={wrap} className={`relative h-full flex flex-col justify-center space-y-3 ${isMobile ? 'min-w-0' : 'min-w-[800px]'}`}>
+      <div className={`flex-1 overflow-x-auto select-none bg-slate-950/80 transition-all ${isMobile ? 'p-2 opacity-100 min-h-0' : 'p-4'}`}>
+        <div ref={wrap} className={`relative h-full flex flex-col justify-center space-y-2 ${isMobile ? 'min-w-[560px]' : 'min-w-[800px]'}`}>
           <div onPointerDown={dragHead} style={{ left: `${pct}%` }} className="absolute top-0 bottom-0 w-1 bg-indigo-500 z-30 cursor-pointer flex flex-col items-center">
             <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 bg-indigo-500 rotate-45 -mt-1 sm:-mt-1.5 rounded-sm shadow-md"></div>
           </div>
-          <div className="h-12 sm:h-16 bg-slate-900/90 rounded-xl border border-slate-800 flex overflow-hidden p-1 gap-1">
+          <div className="h-10 sm:h-16 bg-slate-900/90 rounded-xl border border-slate-800 flex overflow-hidden p-1 gap-1">
             {scenes.map((s, i) => (
               <div
                 key={s.id}
@@ -95,11 +93,11 @@ export default function Timeline({ scenes, total, time, playing, hasVoice, onTog
               </div>
             ))}
           </div>
-          <div className="h-8 sm:h-10 bg-indigo-950/40 rounded-xl border border-indigo-900/50 flex items-center px-3 text-xs text-indigo-300">
+          <div className="h-7 sm:h-10 bg-indigo-950/40 rounded-xl border border-indigo-900/50 flex items-center px-3 text-xs text-indigo-300">
             <i className="fa-solid fa-microphone mr-2 text-indigo-400"></i>
             <span className="font-medium truncate">{hasVoice ? 'Voiceover track loaded' : 'Voiceover Track (Global Audio Sync)'}</span>
           </div>
-          <div className="h-9 sm:h-10 bg-amber-950/30 rounded-xl border border-amber-800/40 flex overflow-hidden gap-1 p-1" aria-label="Caption timeline">
+          <div className="h-8 sm:h-10 bg-amber-950/30 rounded-xl border border-amber-800/40 flex overflow-hidden gap-1 p-1" aria-label="Caption timeline">
             {scenes.map((scene, index) => {
               const words = Array.isArray(scene.captionWords) ? scene.captionWords : [];
               const captionText = words.length

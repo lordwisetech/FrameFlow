@@ -45,6 +45,7 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
 
   const [script, setScript] = useState(initial.script || DEFAULT_SCRIPT);
   const [tab, setTab] = useState(null);
+  const toggleTab = (nextTab) => setTab((current) => current === nextTab ? null : nextTab);
   const [aspect, setAspect] = useState(initial.aspect || '16:9');
   const [voice, setVoice] = useState(() => initial.voiceBlob ? { url: URL.createObjectURL(initial.voiceBlob), file: new File([initial.voiceBlob], 'saved-narration.mp3', { type: initial.voiceBlob.type || 'audio/mpeg' }), name: 'Saved narration', duration: 0 } : null);
   const [bg, setBg] = useState(() => initial.bgBlob ? { url: URL.createObjectURL(initial.bgBlob), file: new File([initial.bgBlob], 'saved-background.mp3', { type: initial.bgBlob.type || 'audio/mpeg' }), name: 'Saved background audio', duration: 0 } : null);
@@ -418,10 +419,8 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
   return (
     <div className="studio-shell h-full flex flex-col overflow-hidden select-none">
       <StudioHeader onBack={onBack} onSettings={() => setShowSettings(true)} onExport={doExport} exporting={!!exp} projectName={projectName} onRename={setProjectName} saveStatus={saveStatus} />
-      
-      <div className={`studio-workspace flex-1 flex overflow-hidden relative min-h-0 ${tab ? 'has-open-panel' : ''}`}>
-        {/* Desktop: Sidebar on left, Main on right | Mobile: Main on top, Sidebar at bottom */}
-        <Sidebar tab={tab} onTab={setTab}>
+      <div className="studio-workspace flex-1 flex overflow-hidden">
+        <Sidebar tab={tab} onTab={toggleTab}>
           {tab === 'script' && <ScriptTab script={script} onChange={setScript} onParse={parse} />}
           {tab === 'scenes' && (
             <ScenesTab scenes={scenes} activeId={active?.id} onChange={updateScene} onAdd={addScene}
@@ -446,16 +445,13 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
               onVoice={(f) => loadAudio(f, setVoice, voiceUrlRef)} onBg={(f) => loadAudio(f, setBg, bgUrlRef)} onBgVol={setBgVol} />
           )}
         </Sidebar>
-        
-        {/* Main content area: Preview + Timeline */}
-        <main className="studio-main flex-1 flex flex-col bg-slate-950 relative overflow-hidden min-h-0">
+        <main className="studio-main flex-1 flex flex-col bg-slate-950 relative overflow-hidden">
           <PreviewPlayer active={active} pool={pool} aspect={aspect} onAspect={setAspect} caption={caption} time={pb.time} />
           <Timeline scenes={scenes} total={total} time={pb.time} playing={pb.playing} hasVoice={!!voice}
             onToggle={pb.toggle} onStop={pb.stop} onRestart={() => pb.seek(0)} onSeek={pb.seek}
             onResize={(id, d) => updateScene(id, { duration: d })} />
         </main>
       </div>
-      
       {showSettings && (
         <SettingsModal keys={keys} onClose={() => setShowSettings(false)}
           onClearAiCache={() => {

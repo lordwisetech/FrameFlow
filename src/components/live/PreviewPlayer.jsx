@@ -55,7 +55,7 @@ export default function PreviewPlayer({ active, pool, aspect, onAspect, caption,
   }
 
   return (
-    <div className="studio-preview flex-1 flex items-center justify-center p-2 sm:p-4 relative min-h-0">
+    <div className="studio-preview flex-1 flex items-center justify-center p-2 sm:p-4 relative">
       <div className="absolute top-2 sm:top-4 left-2 sm:left-6 flex items-center gap-1 bg-slate-900/80 backdrop-blur border border-slate-800 p-0.5 sm:p-1 rounded-xl text-xs z-10">
         {Object.keys(ASPECTS).map((a) => (
           <button
@@ -68,13 +68,8 @@ export default function PreviewPlayer({ active, pool, aspect, onAspect, caption,
         ))}
       </div>
       <div
-        style={{ 
-          width: isMobile ? '100%' : '100%', 
-          maxWidth: isMobile ? '100%' : `${cw}px`,
-          maxHeight: '100%',
-          aspectRatio: `${cw} / ${ch}` 
-        }}
-        className="studio-preview-frame relative bg-black rounded-2xl overflow-hidden shadow-2xl shadow-indigo-950/30 border border-slate-800 transition-all duration-300"
+        style={{ width: isMobile ? '100%' : cw, height: isMobile ? 'auto' : ch, aspectRatio: `${cw} / ${ch}` }}
+        className="studio-preview-frame relative bg-black rounded-2xl overflow-hidden shadow-2xl shadow-indigo-950/30 border border-slate-800 transition-all duration-300 max-w-full"
       >
         <canvas
           ref={canvas}

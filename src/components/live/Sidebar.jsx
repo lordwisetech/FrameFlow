@@ -19,23 +19,18 @@ export default function Sidebar({ tab, onTab, children }) {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  const handleTabClick = (id) => {
-    onTab(tab === id ? null : id);
-  };
-
   return (
-    <aside className={`studio-sidebar ${isMobile ? 'is-mobile' : 'is-desktop'} ${!tab ? 'is-collapsed' : 'has-content'}`}>
-      <div className="studio-tab-content">
-        {children}
-      </div>
+    <aside className={`studio-sidebar ${isMobile ? 'is-mobile' : 'is-desktop'} ${tab ? 'has-active-tool' : 'no-active-tool'}`}>
+      {tab && <div className="studio-tab-content" key={tab}>{children}</div>}
       <nav className="studio-tabbar" aria-label="Studio tools">
         {TABS.map(([id, icon, label]) => (
           <button
             key={id}
             type="button"
-            onClick={() => handleTabClick(id)}
+            onClick={() => onTab(id)}
             aria-label={label}
             aria-current={tab === id ? 'page' : undefined}
+            aria-pressed={tab === id}
             className={tab === id ? 'active' : ''}
           >
             <i className={`fa-solid ${icon}`} />
