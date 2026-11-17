@@ -17,9 +17,8 @@ import Timeline from '../components/live/Timeline';
 import SettingsModal from '../components/live/SettingsModal';
 import ExportOverlay from '../components/live/ExportOverlay';
 import AIDirector from '../components/live/AIDirector';
-import { generateGeminiSceneSpeech, alignGeminiSpeech, combineAudioBlobs } from '../services/geminiSpeech';
-import { loadPhononModel, phononSynthFloat, phononPreview, phononIsLoaded, phononVoices, getPhononLoadProgress, encodeWav } from '../services/phononTts';
-import { loadSpeechAligner, alignSpeechBlob } from '../services/speechAlignment';
+import { generateCartesiaSpeech, listCartesiaVoices, cloneCartesiaVoice } from '../services/cartesiaTts';
+import { combineAudioBlobs } from '../services/audioUtils';
 import { saveProject } from '../services/projectStore';
 
 const loadAudio = (file, set, prevUrlRef) => {
@@ -50,22 +49,21 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
   const [voice, setVoice] = useState(() => initial.voiceBlob ? { url: URL.createObjectURL(initial.voiceBlob), file: new File([initial.voiceBlob], 'saved-narration.mp3', { type: initial.voiceBlob.type || 'audio/mpeg' }), name: 'Saved narration', duration: 0 } : null);
   const [bg, setBg] = useState(() => initial.bgBlob ? { url: URL.createObjectURL(initial.bgBlob), file: new File([initial.bgBlob], 'saved-background.mp3', { type: initial.bgBlob.type || 'audio/mpeg' }), name: 'Saved background audio', duration: 0 } : null);
   const [bgVol, setBgVol] = useState(initial.bgVol ?? 0.2);
-  const [voiceName, setVoiceName] = useState(initial.voiceName || 'Kore');
-  const [speechStyle, setSpeechStyle] = useState(initial.speechStyle || 'Warm, clear, natural educational narrator.');
-  const [speechSpeed, setSpeechSpeed] = useState(initial.speechSpeed || 1);
+  const [cartesiaVoice, setCartesiaVoice] = useState(initial.cartesiaVoice || '');
+  const [speechSpeed, setSpeechSpeed] = useState(initial.speechSpeed ?? 1);
+  const [speechVolume, setSpeechVolume] = useState(initial.speechVolume ?? 1);
+  const [speechEmotion, setSpeechEmotion] = useState(initial.speechEmotion || 'neutral');
+  const [speechLanguage, setSpeechLanguage] = useState(initial.speechLanguage || 'en');
+  const [pronunciationDictId, setPronunciationDictId] = useState(initial.pronunciationDictId || '');
   const [generatingSpeech, setGeneratingSpeech] = useState(false);
   const [speechStatus, setSpeechStatus] = useState('');
-  const [phononVoice, setPhononVoice] = useState(initial.phononVoice || 'default');
-  const [phononLoaded, setPhononLoaded] = useState(false);
-  const [phononLoading, setPhononLoading] = useState(false);
-  const [phononGenerating, setPhononGenerating] = useState(false);
-  const [phononStatus, setPhononStatus] = useState('');
-  const [phononVoicesState, setPhononVoicesState] = useState(phononVoices);
-  const [alignmentLoaded, setAlignmentLoaded] = useState(false);
-  const [alignmentLoading, setAlignmentLoading] = useState(false);
-  const [phononPreviewing, setPhononPreviewing] = useState(false);
-  const [phononPreviewStatus, setPhononPreviewStatus] = useState('');
-  const [phononPreviewUrl, setPhononPreviewUrl] = useState('');
+  const [cartesiaVoices, setCartesiaVoices] = useState([]);
+  const [loadingVoices, setLoadingVoices] = useState(false);
+  const [previewingCartesia, setPreviewingCartesia] = useState(false);
+  const [cartesiaPreviewUrl, setCartesiaPreviewUrl] = useState('');
+  const [cloneName, setCloneName] = useState('');
+  const [cloneFile, setCloneFile] = useState(null);
+  const [cloningVoice, setCloningVoice] = useState(false);
   const previewUrlRef = useRef('');
   const [pixSeed, setPixSeed] = useState({ q: '', n: 0 });
   const [showSettings, setShowSettings] = useState(false);
@@ -101,6 +99,7 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
   };
 });
 
+  const cartesiaKey = (keys.aiKeys || []).find((item) => item.provider === 'cartesia' && item.key?.trim())?.key || '';
   const voiceUrlRef = useRef(voice?.url || '');
   const bgUrlRef = useRef(bg?.url || '');
 
@@ -155,14 +154,14 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
     setSaveStatus('Saving…');
     const timer = window.setTimeout(async () => {
       try {
-        const updated = { ...project, name: projectName.trim() || 'Untitled project', updatedAt: Date.now(), data: { script, raw, aspect, caption, bgVol, voiceName, speechStyle, speechSpeed, phononVoice, voiceBlob: voice?.file || null, bgBlob: bg?.file || null } };
+        const updated = { ...project, name: projectName.trim() || 'Untitled project', updatedAt: Date.now(), data: { script, raw, aspect, caption, bgVol, cartesiaVoice, speechSpeed, speechVolume, speechEmotion, speechLanguage, pronunciationDictId, voiceBlob: voice?.file || null, bgBlob: bg?.file || null } };
         await saveProject(updated);
         onProjectChange?.(updated);
         setSaveStatus('Saved');
       } catch (error) { console.error('Project autosave failed:', error); setSaveStatus('Save failed'); }
     }, 650);
     return () => window.clearTimeout(timer);
-  }, [project?.id, projectName, script, raw, aspect, caption, bgVol, voiceName, speechStyle, speechSpeed, phononVoice, voice?.file, bg?.file]);
+  }, [project?.id, projectName, script, raw, aspect, caption, bgVol, cartesiaVoice, speechSpeed, speechVolume, speechEmotion, speechLanguage, pronunciationDictId, voice?.file, bg?.file]);
 
   const updateScene = (id, patch) => setRaw((p) => p.map((s) => {
     if (s.id !== id) return s;
@@ -220,102 +219,18 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
     hasVoiceover: !!voice, hasBackgroundMusic: !!bg, captionSettings: caption,
   };
 
-  const generateAllSceneSpeech = async () => {
-    const geminiKey = (keys.aiKeys || []).find((item) => item.provider === 'gemini' && item.key?.trim())?.key;
-    if (!geminiKey) { setSpeechStatus('Add a Gemini API key in Settings first.'); return; }
-    if (!raw.length) { setSpeechStatus('Parse your script into scenes first.'); return; }
-    setGeneratingSpeech(true); setSpeechStatus('Starting Gemini narration…');
+  const loadCartesiaVoices = async () => {
+    if (!cartesiaKey) { setSpeechStatus('Add your Cartesia API key in Settings first.'); return; }
+    setLoadingVoices(true); setSpeechStatus('Loading your Cartesia voice library…');
     try {
-      const audioBlobs = [];
-      const updated = [];
-      for (let i = 0; i < raw.length; i++) {
-        const scene = raw[i];
-        setSpeechStatus(`Generating speech and aligning words for scene ${i + 1} of ${raw.length}…`);
-        const audio = await generateGeminiSceneSpeech({ apiKey: geminiKey, text: scene.text, voiceName, style: speechStyle, speed: speechSpeed });
-        const words = await alignGeminiSpeech({ apiKey: geminiKey, text: scene.text, audioBlob: audio });
-        // Apply selected speed consistently to the clip and its word timestamps.
-        const scaledWords = words.map((word) => ({ ...word, start: word.start / speechSpeed, end: word.end / speechSpeed }));
-        const audioDuration = await new Promise((resolve, reject) => {
-          const url = URL.createObjectURL(audio); const probe = new Audio(url);
-          probe.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(probe.duration / speechSpeed); };
-          probe.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read generated audio duration.')); };
-        });
-        updated.push({ ...scene, duration: Math.max(1, +audioDuration.toFixed(2)), captionWords: scaledWords });
-        audioBlobs.push(audio);
-      }
-      const combinedFile = await combineAudioBlobs(audioBlobs, speechSpeed);
-      setRaw(updated);
-      loadAudio(combinedFile, setVoice, voiceUrlRef);
-      setSpeechStatus(`Done! Generated ${updated.length} scene narrations and synchronized word captions.`);
-      setTab('captions');
-    } catch (error) {
-      console.error(error);
-      setSpeechStatus(`Generation stopped: ${error.message}`);
-    } finally { setGeneratingSpeech(false); }
+      const voices = await listCartesiaVoices(cartesiaKey);
+      setCartesiaVoices(voices);
+      if (!cartesiaVoice && voices.length) setCartesiaVoice(voices[0].id);
+      setSpeechStatus(`Loaded ${voices.length} Cartesia voices.`);
+    } catch (error) { setSpeechStatus(`Could not load voices: ${error.message}`); }
+    finally { setLoadingVoices(false); }
   };
-
-  const loadLocalPhonon = async () => {
-    if (phononLoaded || phononLoading) return;
-    setPhononLoading(true);
-    setPhononStatus('Downloading Phonon TTS model (first run downloads ~64 MB + voice). Keep this tab open.');
-    const progressTimer = window.setInterval(() => {
-      setPhononStatus(getPhononLoadProgress() || 'Downloading Phonon TTS model…');
-    }, 500);
-    try {
-      await loadPhononModel({
-        onProgress: (progress) => setPhononStatus(progress),
-      });
-      setPhononLoaded(true);
-      setPhononStatus('Phonon TTS model ready on this device. You can now generate narration offline.');
-    } catch (error) {
-      console.error('Phonon load failed:', error);
-      setPhononStatus(`Could not load Phonon TTS: ${error.message}`);
-    } finally {
-      window.clearInterval(progressTimer);
-      setPhononLoading(false);
-    }
-  };
-
-  const loadLocalAligner = async () => {
-    if (alignmentLoaded) return true;
-    if (alignmentLoading) return false;
-    setAlignmentLoading(true);
-    setPhononStatus('Downloading / loading the separate offline word-sync model…');
-    try {
-      await loadSpeechAligner((progress) => setPhononStatus(progress.message || 'Preparing offline word sync…'));
-      setAlignmentLoaded(true);
-      setPhononStatus('Offline caption sync model is ready. It can analyse generated speech on this device.');
-      return true;
-    } catch (error) {
-      console.error('Caption sync model load failed:', error);
-      setPhononStatus(`Could not load the offline caption sync model: ${error.message}`);
-      throw error;
-    } finally { setAlignmentLoading(false); }
-  };
-
-  const previewPhononVoice = async () => {
-    if (phononPreviewing || phononGenerating) return;
-    setPhononPreviewing(true);
-    setPhononPreviewStatus('Preparing voice sample…');
-    try {
-      if (!phononLoaded) await loadLocalPhonon();
-      if (!phononVoice) { setPhononPreviewStatus('Select a voice first.'); return; }
-      const sample = await phononPreview({
-        text: 'Hello! This is a short preview of the selected Phonon voice.',
-        voice: phononVoice,
-        speed: speechSpeed,
-      });
-      // Revoke the previous preview URL before creating a new one.
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-      const url = URL.createObjectURL(sample);
-      previewUrlRef.current = url;
-      setPhononPreviewUrl(url);
-      setPhononPreviewStatus('Voice sample ready. Press play to listen.');
-    } catch (error) {
-      console.error('Phonon voice preview failed:', error);
-      setPhononPreviewStatus(`Preview failed: ${error.message}`);
-    } finally { setPhononPreviewing(false); }
-  };
+  useEffect(() => { if (cartesiaKey) loadCartesiaVoices(); }, [cartesiaKey]); // eslint-disable-line
 
   const approximateWordTimings = (text, duration) => {
     const tokens = String(text || '').trim().split(/\s+/).filter(Boolean);
@@ -323,54 +238,62 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
     const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || 1;
     let cursor = 0;
     return tokens.map((word, index) => {
-      const start = cursor;
-      cursor += duration * (weights[index] / totalWeight);
+      const start = cursor; cursor += duration * (weights[index] / totalWeight);
       return { word, start, end: index === tokens.length - 1 ? duration : cursor, index };
     });
   };
 
-  const generatePhononNarration = async () => {
-    if (!phononLoaded) { setPhononStatus('Load the Phonon model first.'); return; }
-    if (!raw.length) { setPhononStatus('Parse your script into scenes first.'); return; }
-    setPhononGenerating(true);
-    const audioBlobs = [];
-    const updated = [];
-    let approximateCount = 0;
+  const previewCartesiaVoice = async () => {
+    if (previewingCartesia || generatingSpeech) return;
+    setPreviewingCartesia(true); setSpeechStatus('Generating a Cartesia voice preview…');
     try {
-      if (!alignmentLoaded) await loadLocalAligner();
+      const { blob } = await generateCartesiaSpeech({ apiKey: cartesiaKey, text: 'Hello! This is a preview of your selected voice in Explainer Studio Pro.', voiceId: cartesiaVoice, speed: speechSpeed, volume: speechVolume, emotion: speechEmotion, language: speechLanguage, pronunciationDictId });
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      const url = URL.createObjectURL(blob); previewUrlRef.current = url; setCartesiaPreviewUrl(url);
+      setSpeechStatus('Voice preview is ready. Press play to listen.');
+    } catch (error) { setSpeechStatus(`Voice preview failed: ${error.message}`); }
+    finally { setPreviewingCartesia(false); }
+  };
+
+  const generateCartesiaNarration = async () => {
+    if (!cartesiaKey) { setSpeechStatus('Add your Cartesia API key in Settings first.'); return; }
+    if (!cartesiaVoice) { setSpeechStatus('Select a Cartesia voice first.'); return; }
+    if (!raw.length) { setSpeechStatus('Parse your script into scenes first.'); return; }
+    setGeneratingSpeech(true); setSpeechStatus('Preparing Cartesia narration…');
+    const audioBlobs = []; const updated = []; let approximateCount = 0;
+    try {
       for (let i = 0; i < raw.length; i++) {
         const scene = raw[i];
-        setPhononStatus(`Generating Phonon narration for scene ${i + 1} of ${raw.length}…`);
-        const { pcm, duration } = await phononSynthFloat({
-          text: scene.text,
-          voice: phononVoice,
-          speed: speechSpeed,
-        });
-        const wavBlob = encodeWav(pcm, 24000);
-        const audio = wavBlob;
-        let captionWords;
-        try {
-          setPhononStatus(`Analysing actual speech and synchronising words for scene ${i + 1} of ${raw.length}…`);
-          captionWords = await alignSpeechBlob(audio, scene.text, (progress) => setPhononStatus(`Scene ${i + 1}/${raw.length}: ${progress.message || 'Aligning spoken words…'}`));
-        } catch (alignmentError) {
-          console.warn(`Word alignment fallback for scene ${i + 1}:`, alignmentError);
-          approximateCount++;
-          captionWords = approximateWordTimings(scene.text, duration);
-        }
+        setSpeechStatus(`Generating Cartesia narration for scene ${i + 1} of ${raw.length}…`);
+        const result = await generateCartesiaSpeech({ apiKey: cartesiaKey, text: scene.text, voiceId: cartesiaVoice, speed: speechSpeed, volume: speechVolume, emotion: speechEmotion, language: speechLanguage, pronunciationDictId });
+        const audio = result.blob;
+        const duration = result.duration;
+        let captionWords = result.words;
+        if (!captionWords?.length) { approximateCount++; captionWords = approximateWordTimings(scene.text, duration); }
         updated.push({ ...scene, duration: Math.max(1, +duration.toFixed(2)), captionWords });
         audioBlobs.push(audio);
       }
       const combinedFile = await combineAudioBlobs(audioBlobs, 1);
-      setRaw(updated);
-      loadAudio(combinedFile, setVoice, voiceUrlRef);
-      setPhononStatus(approximateCount
-        ? `Narration generated. ${updated.length - approximateCount} scene(s) received audio-based word timing; ${approximateCount} scene(s) used approximate timing because speech matching was inconclusive.`
-        : `Done! Generated ${updated.length} local scene narrations and synchronised captions using word timestamps detected from the actual audio.`);
+      setRaw(updated); loadAudio(combinedFile, setVoice, voiceUrlRef);
+      setSpeechStatus(approximateCount
+        ? `Narration generated. ${updated.length - approximateCount} scene(s) received audio-based word timing; ${approximateCount} scene(s) used estimated timing because Cartesia did not return word timestamps for that scene.`
+        : `Done! Generated ${updated.length} Cartesia scene narrations with native word-level timestamps.`);
       setTab('captions');
-    } catch (error) {
-      console.error('Phonon generation failed:', error);
-      setPhononStatus(`Generation stopped: ${error.message}`);
-    } finally { setPhononGenerating(false); }
+    } catch (error) { console.error('Cartesia narration failed:', error); setSpeechStatus(`Generation stopped: ${error.message}`); }
+    finally { setGeneratingSpeech(false); }
+  };
+
+  const createVoiceClone = async () => {
+    if (!cartesiaKey) { setSpeechStatus('Add your Cartesia API key in Settings first.'); return; }
+    if (!cloneName.trim() || !cloneFile) { setSpeechStatus('Enter a name and choose a recording for your voice clone.'); return; }
+    setCloningVoice(true); setSpeechStatus('Uploading your recording to Cartesia for private voice cloning…');
+    try {
+      const cloned = await cloneCartesiaVoice({ apiKey: cartesiaKey, file: cloneFile, name: cloneName, language: speechLanguage.split('-')[0] });
+      setCartesiaVoices((previous) => [{ ...cloned, is_owner: true, status: 'active' }, ...previous]);
+      setCartesiaVoice(cloned.id); setCloneName(''); setCloneFile(null);
+      setSpeechStatus(`Voice clone “${cloned.name}” created and selected.`);
+    } catch (error) { setSpeechStatus(`Voice cloning failed: ${error.message}`); }
+    finally { setCloningVoice(false); }
   };
 
   const syncToVoice = () => {
@@ -435,13 +358,14 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
           {tab === 'ai-director' && <AIDirector embedded keys={keys.aiKeys || []} editorContext={aiEditorContext} onApplyAction={applyAIAction} onOpenSettings={() => setShowSettings(true)} />}
           {tab === 'audio' && (
             <AudioTab voice={voice} bg={bg} bgVol={bgVol} onSync={syncToVoice}
-              aiKeys={keys.aiKeys} onGenerateSpeech={generateAllSceneSpeech} generating={generatingSpeech} speechStatus={speechStatus}
-              voiceName={voiceName} onVoiceName={setVoiceName} speechStyle={speechStyle} onSpeechStyle={setSpeechStyle}
-              speechSpeed={speechSpeed} onSpeechSpeed={setSpeechSpeed}
-              phononLoaded={phononLoaded} phononLoading={phononLoading} phononGenerating={phononGenerating}
-              phononStatus={phononStatus} phononVoices={phononVoicesState} phononVoice={phononVoice} onPhononVoice={setPhononVoice}
-              onLoadPhonon={loadLocalPhonon} onGeneratePhonon={generatePhononNarration}
-              onPreviewPhonon={previewPhononVoice} phononPreviewUrl={phononPreviewUrl} phononPreviewing={phononPreviewing} phononPreviewStatus={phononPreviewStatus}
+              cartesiaKey={cartesiaKey} cartesiaVoices={cartesiaVoices} cartesiaVoice={cartesiaVoice} onCartesiaVoice={setCartesiaVoice}
+              onLoadCartesiaVoices={loadCartesiaVoices} loadingVoices={loadingVoices} onGenerateCartesia={generateCartesiaNarration}
+              generating={generatingSpeech} speechStatus={speechStatus} speechSpeed={speechSpeed} onSpeechSpeed={setSpeechSpeed}
+              speechVolume={speechVolume} onSpeechVolume={setSpeechVolume} speechEmotion={speechEmotion} onSpeechEmotion={setSpeechEmotion}
+              speechLanguage={speechLanguage} onSpeechLanguage={setSpeechLanguage} pronunciationDictId={pronunciationDictId} onPronunciationDictId={setPronunciationDictId}
+              onPreviewCartesia={previewCartesiaVoice} previewUrl={cartesiaPreviewUrl} previewing={previewingCartesia}
+              cloneName={cloneName} onCloneName={setCloneName} cloneFile={cloneFile} onCloneFile={setCloneFile}
+              onCloneVoice={createVoiceClone} cloning={cloningVoice}
               onVoice={(f) => loadAudio(f, setVoice, voiceUrlRef)} onBg={(f) => loadAudio(f, setBg, bgUrlRef)} onBgVol={setBgVol} />
           )}
         </Sidebar>
@@ -454,11 +378,6 @@ export default function LiveExplainerPage({ onBack, project, onProjectChange }) 
       </div>
       {showSettings && (
         <SettingsModal keys={keys} onClose={() => setShowSettings(false)}
-          onClearAiCache={() => {
-            setPhononLoaded(false);
-            setAlignmentLoaded(false);
-            setPhononStatus('AI model cache cleared. Load the Phonon model again when ready to generate.');
-          }}
           onSave={(k) => {
             setKeys(k);
             localStorage.setItem('pixabay_key', k.pixabay);

@@ -56,7 +56,7 @@ export const saveProject = (project) => transaction('readwrite', (store) => stor
 export const deleteProject = (id) => transaction('readwrite', (store) => store.delete(id));
 export const createProject = (name = 'Untitled explainer') => ({
   id: createId(), name, createdAt: Date.now(), updatedAt: Date.now(),
-  data: { script: '', raw: [], aspect: '16:9', caption: null, bgVol: 0.2, voiceName: 'Kore', speechStyle: 'Warm, clear, natural educational narrator.', speechSpeed: 1 },
+  data: { script: '', raw: [], aspect: '16:9', caption: null, bgVol: 0.2, cartesiaVoice: '', speechSpeed: 1, speechVolume: 1, speechEmotion: 'neutral', speechLanguage: 'en', pronunciationDictId: '' },
 });
 
 const blobToDataURL = (blob) => new Promise((resolve, reject) => {

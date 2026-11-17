@@ -1,7 +1,5 @@
 
 import { useState } from 'react';
-import { phononClearCache, phononCacheInfo } from '../../services/phononTts';
-import { clearSpeechAlignerCache, disposeSpeechAligner } from '../../services/speechAlignment';
 
 const createId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -15,9 +13,13 @@ const providers = {
     name: 'OpenRouter',
     description: 'OpenRouter API',
   },
+  cartesia: {
+    name: 'Cartesia Text-to-Speech',
+    description: 'Cartesia Sonic voice generation',
+  },
 };
 
-export default function SettingsModal({ keys, onSave, onClose, onClearAiCache }) {
+export default function SettingsModal({ keys, onSave, onClose }) {
   const [draft, setDraft] = useState(() => ({
     pixabay: keys.pixabay || '',
     coverr: keys.coverr || '',
@@ -36,9 +38,6 @@ export default function SettingsModal({ keys, onSave, onClose, onClearAiCache })
   const [statuses, setStatuses] = useState({});
   const [testing, setTesting] = useState(null);
   const [coverrStatus, setCoverrStatus] = useState(null);
-  const [cacheInfo, setCacheInfo] = useState(null);
-  const [clearingCache, setClearingCache] = useState(false);
-  const [cacheMessage, setCacheMessage] = useState(null);
 
   const field =
     'w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-base sm:p-2.5 sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500 min-h-[44px]';
@@ -125,11 +124,13 @@ export default function SettingsModal({ keys, onSave, onClose, onClearAiCache })
           'https://openrouter.ai/api/v1/key',
           {
             method: 'GET',
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-            },
+            headers: { Authorization: `Bearer ${apiKey}` },
           }
         );
+      } else if (item.provider === 'cartesia') {
+        response = await fetch('https://api.cartesia.ai/voices?limit=1', {
+          headers: { Authorization: `Bearer ${apiKey}`, 'Cartesia-Version': '2026-08-14' },
+        });
       } else {
         throw new Error('Unsupported AI provider.');
       }
@@ -268,9 +269,11 @@ export default function SettingsModal({ keys, onSave, onClose, onClearAiCache })
             </h4>
 
             <p className="text-xs text-slate-500 mt-1">
-              Add and test your Gemini or OpenRouter API keys.
+              Add and test your Gemini, OpenRouter, or Cartesia API keys. Gemini remains available for script and AI features; Cartesia powers narration.
             </p>
           </div>
+
+          <p className="text-[10px] text-amber-300/90 bg-amber-500/5 border border-amber-500/20 rounded-lg p-2">Cartesia is called from this browser in this build, so the key is saved in this browser and can be seen by someone with access to this device or browser tools. For a public multi-user deployment, move Cartesia requests behind a private server/Cloudflare Worker secret.</p>
 
           {draft.aiKeys.map((item) => {
             const status = statuses[item.id];
@@ -354,6 +357,7 @@ export default function SettingsModal({ keys, onSave, onClose, onClearAiCache })
             >
               <option value="gemini">Google Gemini</option>
               <option value="openrouter">OpenRouter</option>
+              <option value="cartesia">Cartesia TTS</option>
             </select>
 
             <button
@@ -372,91 +376,24 @@ export default function SettingsModal({ keys, onSave, onClose, onClearAiCache })
           )}
         </div>
 
-        {/* AI CACHE MANAGEMENT */}
-        <div className="border-t border-slate-800 pt-5 space-y-3">
-          <div>
-            <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-              <i className="fa-solid fa-cloud-arrow-down text-sky-400"></i>
-              AI Model Cache
-            </h4>
-            <p className="text-xs text-slate-500 mt-1">
-              Phonon TTS and Whisper caption-sync models are cached locally (~140 MB total). They are never deleted automatically.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={async () => {
-                setClearingCache(true);
-                setCacheMessage(null);
-                try {
-                  // Load cache info for display.
-                  const info = await phononCacheInfo();
-                  setCacheInfo(info);
-                  // Clear both model caches.
-                  await phononClearCache();
-                  await clearSpeechAlignerCache();
-                  // Dispose the alignment worker.
-                  disposeSpeechAligner();
-                  setCacheMessage({ type: 'success', message: 'AI model cache cleared. Models will re-download on next use.' });
-                } catch (error) {
-                  setCacheMessage({ type: 'error', message: `Cache clear partially failed: ${error.message}` });
-                } finally {
-                  setClearingCache(false);
-                  // Notify parent so it can update loaded state.
-                  onClearAiCache?.();
-                }
-              }}
-              disabled={clearingCache}
-              className="flex-1 rounded-lg py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white"
-            >
-              <i className={`fa-solid ${clearingCache ? 'fa-spinner fa-spin' : 'fa-trash-can'} mr-1.5`}></i>
-              {clearingCache ? 'Clearing…' : 'Clear AI Model Cache'}
-            </button>
-            <button
-              onClick={async () => {
-                setClearingCache(true);
-                try {
-                  const info = await phononCacheInfo();
-                  setCacheInfo(info);
-                  setCacheMessage({ type: 'info', message: info ? `Cached models: ${(info.cacheSize / (1024 * 1024)).toFixed(1)} MB` : 'No cached models found.' });
-                } catch (error) {
-                  setCacheMessage({ type: 'error', message: `Could not read cache info: ${error.message}` });
-                } finally {
-                  setClearingCache(false);
-                }
-              }}
-              disabled={clearingCache}
-              className="px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
-            >
-              <i className="fa-solid fa-info mr-1"></i>Info
-            </button>
-          </div>
-          {cacheMessage && (
-            <div className={`rounded-lg p-2 text-xs ${
-              cacheMessage.type === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
-              cacheMessage.type === 'info' ? 'bg-indigo-500/10 text-indigo-300' :
-              'bg-red-500/10 text-red-400'
-            }`}>
-              {cacheMessage.message}
-            </div>
-          )}
-          {cacheInfo && (
-            <p className="text-[10px] text-slate-500">
-              Phonon model: {cacheInfo.loaded ? 'loaded in memory' : 'not loaded'} · Cache: {(cacheInfo.cacheSize / (1024 * 1024)).toFixed(1)} MB
-            </p>
-          )}
-        </div>
-
-        {/* SAVE */}
-        <div className="flex justify-end pt-3 border-t border-slate-800">
+        {/* SETTINGS ACTIONS: keep Save visible on mobile and desktop */}
+        <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-2 p-4 sm:p-6 bg-slate-900/95 backdrop-blur border-t border-slate-800 flex gap-3">
           <button
-            onClick={saveSettings}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs"
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 py-3 text-sm font-semibold min-h-[46px]"
           >
-            Save Configuration
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={saveSettings}
+            className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white py-3 text-sm font-bold min-h-[46px] shadow-lg shadow-indigo-950/30"
+          >
+            <i className="fa-solid fa-floppy-disk mr-2"></i>
+            Save Settings
           </button>
         </div>
-
       </div>
     </div>
   );

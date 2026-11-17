@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { askAIDirector, extractAIActions, readAIMemory, saveAIMemory, readAIChat, saveAIChat, speakWithGemini } from '../../services/aiDirector';
+import { askAIDirector, extractAIActions, readAIMemory, saveAIMemory, readAIChat, saveAIChat } from '../../services/aiDirector';
 
 const tasks = [
   { id: 'write', label: 'Write a script', icon: 'fa-file-pen', prompt: 'Help me create a new video script. First ask me what the video is about and its intended audience.' },
@@ -72,21 +72,14 @@ export default function AIDirector({ keys = [], editorContext, onApplyAction, on
   const say = async (text) => {
     if (!voiceOn || !text) return;
     setSpeaking(true);
-    try {
-      const geminiKey = keys.find(k => k.provider === 'gemini' && k.key?.trim())?.key;
-      if (geminiKey) await speakWithGemini(geminiKey, text);
-      else if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1; utterance.pitch = 0.95;
-        utterance.onend = () => setSpeaking(false);
-        utterance.onerror = () => setSpeaking(false);
-        window.speechSynthesis.speak(utterance);
-        return;
-      }
-    } catch (error) {
-      if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(text); u.onend = () => setSpeaking(false); window.speechSynthesis.speak(u); return; }
-      console.warn('AI voice unavailable:', error);
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1; utterance.pitch = 0.95;
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => setSpeaking(false);
+      window.speechSynthesis.speak(utterance);
+      return;
     }
     setSpeaking(false);
   };
